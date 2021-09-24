@@ -1,0 +1,422 @@
+---
+title: "Assignment 2 - Non-parametric bounds"
+author: "S. Engilbertsson and I.v.d. Voort"
+date: "13/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Code to load dataset and compute regressions
+Commenting style follows http://adv-r.had.co.nz/Style.html`
+
+```{r, message=FALSE, warning=FALSE}
+rm(list = ls())
+
+library(foreign)
+library(cobalt)
+library(xtable)
+library(stargazer)
+library(plm)
+library(dplyr)
+```
+
+### List of working directories
+Default working directory
+```{r}
+cd <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/code'
+```
+
+Folder containing data and folder for outputs
+```{r}
+dt <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/data'
+tb <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/Final'
+```
+
+### Reading in data
+```{r}
+setwd(dt)
+df <- as.data.frame(read.dta('searchperiod.dta'))
+setwd(tb)
+```
+
+# Assignment
+## **Naive estimation**
+### *(i)* Compute the average probability to receive benefits 10 and 30 weeks after application for applicants that had a search period and applicants that did not have a search period.
+
+### *Solution*
+For those that had a search period we find:
+```{r}
+Pr10s <- mean(df[["benefits_week10"]][df[["searchperiod"]]==1])
+print(Pr10s,digits = 3)  
+  
+Pr30s <- mean(df[["benefits_week30"]][df[["searchperiod"]]==1])
+print(Pr30s,digits = 3) 
+```
+
+For those who did not have a search period we find:
+```{r}
+Pr10ns <- mean(df[["benefits_week10"]][df[["searchperiod"]]==0])
+print(Pr10ns,digits = 3)  
+  
+Pr30ns <- mean(df[["benefits_week30"]][df[["searchperiod"]]==0])
+print(Pr30ns,digits = 3) 
+```
+
+Let's perform t-tests on the differences!
+```{r}
+t.test(df[["benefits_week10"]][df[["searchperiod"]]==1]-df[["benefits_week10"]][df[["searchperiod"]]==0])
+
+t.test(df[["benefits_week30"]][df[["searchperiod"]]==1]-df[["benefits_week30"]][df[["searchperiod"]]==0])
+```
+
+### *(ii)* Make a balancing table in which you compare characteristics of applicants with and without a search period.
+
+### *Solution*
+```{r}
+df_search <- group_by(df, searchperiod)
+sums <- summarise(df_search, across(names(df[,c(4:23)]), mean, na.rm=T))
+sum_tbl <- xtable(t(sums))  
+print.xtable(sum_tbl,type="latex", file="sum_tbl.stex")
+```
+
+Use package:
+```{r}
+bal.tab(df, treat = df$searchperiod,
+        disp = c("means", "sds"), un = TRUE, 
+        stats = c("mean.diffs"))
+```
+
+### *(iii)* Regress the outcome variables first only on whether or not a search period was applied (which should give the difference-in-means estimate) and next include other covariates in the regression.
+
+### *Solution*
+Because of the length of the regression equations, I am going to turn them into strings and store them here so we can use them more easily. We do not include *period1*, *location1* and *educ_unknown* in our regression to avoid perfect collinearity.
+```{r}
+vec <- c("searchperiod",names(df)[4:9],names(df)[11:13],names(df)[15:21],names(df)[23])
+vec <- paste(vec, collapse="+")
+vecu <- c("searchperiod", "age", "children", "period1", "period4", "location1", "location2", "location3", "location4", "educ_unknown")
+vecu <- paste(vecu, collapse="+")
+reg_cov10 <- paste("benefits_week10", vec, sep="~")
+reg_cov30 <- paste("benefits_week30", vec, sep="~")
+reg_cov10u <- paste("benefits_week10", vecu, sep="~")
+reg_cov30u <- paste("benefits_week30", vecu, sep="~")
+```
+
+Now we regress the two outcome variables just on whether or not a search period was applied:
+```{r}
+r1 <- lm(benefits_week10~searchperiod,data=df)
+
+r2 <- lm(benefits_week30~searchperiod,data=df)
+```
+
+Now we include other covariates, we include 
+```{r}
+r3 <- lm(reg_cov10,data=df)
+
+r4 <- lm(reg_cov30,data=df)
+```
+
+Here we only include the unbalanced covariates:
+```{r}
+r5 <- lm(reg_cov10u,data = df)
+
+r6 <- lm(reg_cov30u,data=df)
+```
+
+Finally, we compare all the three regressions for both the 10 week and 30 week cases in two tables:
+```{r, results='asis'}
+stargazer(r1,r3, r5,
+          type = "html")
+
+stargazer(r2,r4, r6,
+          type = "html")
+```
+
+
+### *(iv)* Compute the no-assumption bounds for the treatment effects.
+
+### *Solution*
+$$
+E[Y|D=1]P(D=1)-E[Y|D=0]P(D=0)+(y_{min}+y_{max})P(D=0)-y_{max}\\
+\leq E[Y_1^*]-E[Y_0^*]\leq\\
+E[Y|D=1]P(D=1)-E[Y|D=0]P(D=0)+(y_{min}+y_{max})P(D=0)-y_{min}
+$$
+```{r}
+EY_D1 <- mean(df[df$searchperiod == 1,]$benefits_week10)
+EY_D0 <- mean(df[df$searchperiod == 0,]$benefits_week10)
+Pr_D1 <- mean(df$searchperiod)
+Pr_D0 <- 1 - mean(df$searchperiod)
+minY <- 0
+maxY <- 1
+
+# Lower bound
+EY_D1*Pr_D1 - EY_D0*Pr_D0+(minY+maxY)*Pr_D0-maxY
+# Upper bound
+EY_D1*Pr_D1 - EY_D0*Pr_D0+(minY+maxY)*Pr_D0-minY
+```
+Now we do the same for the 30 week benefits.
+```{r}
+EY_D1_30 <- mean(df[df$searchperiod == 1,]$benefits_week30)
+EY_D0_30 <- mean(df[df$searchperiod == 0,]$benefits_week30)
+
+# Lower bound
+EY_D1_30*Pr_D1 - EY_D0_30*Pr_D0+(minY+maxY)*Pr_D0-maxY
+# Upper bound
+EY_D1_30*Pr_D1 - EY_D0_30*Pr_D0+(minY+maxY)*Pr_D0-minY
+```
+
+### *(v)* Assume that caseworkers only apply search periods to applicants who benefit from it. How does this affects the bounds.
+
+### *Solution*
+The Roy model assumptions gives us the following new bounds:
+```{r}
+# Lower bound
+(EY_D1-maxY)*Pr_D1
+# Upper bound
+- (EY_D0-maxY)*Pr_D0
+```
+We see that by imposing the single additional assumption, our bounds are now much narrower than before.
+
+### *(vi)* Next, impose the monotone treatment response and the monotone treatment selection assumption separately and also jointly.
+
+### *Solution*
+The Monotone Treatment Selection (MTS) assumption assumes that individuals assigned to treatment have a better expected value from the treatment than those not assigned treatment, so in our case $E[Y_1^*]\geq E[Y|D=1]$ (since a lower $Y$ value is preferred by the case workers), and $E[Y_0^*]\leq E[Y|D=0]$.
+This just affects our lower bound, and the bounds become:
+$$
+E[Y|D=1]-E[Y|D=0]\\
+\leq E[Y_1^*]-E[Y_0^*]\leq\\
+E[Y|D=1]P(D=1)-E[Y|D=0]P(D=0)+(y_{min}+y_{max})P(D=0)-y_{min}.
+$$
+
+We are also asked to impose the Monotone Treatment Response (MTR) assumption, which states that treatment can only improve the outcomes, i.e. that $y_{max}\geq Y_0^*\geq Y_1^* \geq y_{min}$. The upper bound of the treatment thus becomes 0 while the lower bound stays unchanged. Combining the MTS and MTR gives us the bounds:
+$$
+E[Y|D=1]-E[Y|D=0]\leq E[Y_1^*]-E[Y_0^*]\leq 0.
+$$
+Let us calculate the bonds separately and jointly:
+```{r}
+# MTS - 10 weeks
+# Lower bound
+EY_D1 - EY_D0
+# Upper bound
+EY_D1*Pr_D1 - EY_D0*Pr_D0+(minY+maxY)*Pr_D0-minY
+
+# MTS - 30 weeks
+# Lower bound
+EY_D1_30 - EY_D0_30
+# Upper bound
+EY_D1_30*Pr_D1 - EY_D0_30*Pr_D0+(minY+maxY)*Pr_D0-minY
+
+# MTR - 10 weeks
+# Lower bound
+EY_D1*Pr_D1 - EY_D0*Pr_D0+(minY+maxY)*Pr_D0-maxY
+# Upper bound
+0
+
+# MTR - 30 weeks
+# Lower bound
+EY_D1_30*Pr_D1 - EY_D0_30*Pr_D0+(minY+maxY)*Pr_D0-maxY
+# Upper bound
+0
+
+# Joint - 10 weeks
+# Lower bound
+EY_D1 - EY_D0
+# Upper bound
+0
+
+# Joint - 30 weeks
+# Lower bound
+EY_D1_30 - EY_D0_30
+# Upper bound
+0
+```
+
+These bounds also provide us with the testable implication that the expected outcome of those receiving the treatment must be smaller, and therefore better, than the expected outcome of those who did not go through the search period, $E[Y|D=1]\leq E[Y|D=0]$, we have:
+```{r}
+# 10 weeks
+EY_D0-EY_D1
+
+# 30 weeks
+EY_D0_30-EY_D1_30
+```
+So the assumptions appear reasonable. Economic intuition also supports these results. For the MTS, we assume that case workers require only those applicants for whom they believe the search period could provide useful to be part of the treatment group. This is supported by our balancing table above which showed, for instance, that younger applicants are disproportionately required to go through the search period. 
+
+For MTR, we assume that those applicants who are required to apply for a significant number of jobs before receiving unemployment benefits are more likely to find a job than those not required to apply for any jobs before receiving benefits. They thus receive, on average, less benefits than applicants from the control group.
+
+### *(vii)* Usually higher educated workers have more favorable labor market outcomes. Use education as monotone instrumental variable and compute the bounds.
+
+### *Solution*
+In our data set we have 5 education-related dummy-variables. Let us get a feeling for those variables by considering some simple values for all of them:
+```{r}
+# How common is each value?
+Nz0 <- sum(df[["educ_primaryorless"]]==1)
+Nz0
+Nz1 <- sum(df[["educ_prepvocational"]]==1)
+Nz1
+Nz2 <- sum(df[["educ_vocational"]]==1)
+Nz2
+Nz3 <- sum(df[["educ_bachelormaster"]]==1)
+Nz3
+NzU <- sum(df[["educ_unknown"]]==1)
+NzU
+```
+We see that a fairly even amount of applicants have prep-vocational schooling, vocational schooling or a bachelor or master degree. However fewer have only a primary education or less, and the education level is unknown for very few applicants.
+
+We can then consider the mean values for applicants from each of those categories:
+```{r}
+# 10 weeks mean for different education levels
+E0 <- mean(df[["benefits_week10"]][df[["educ_primaryorless"]]==1])
+E0
+E1 <- mean(df[["benefits_week10"]][df[["educ_prepvocational"]]==1])
+E1
+E2 <- mean(df[["benefits_week10"]][df[["educ_vocational"]]==1])
+E2
+E3 <- mean(df[["benefits_week10"]][df[["educ_bachelormaster"]]==1])
+E3
+unk <- mean(df[["benefits_week10"]][df[["educ_unknown"]]==1])
+unk
+```
+```{r}
+# 30 weeks mean for different education levels
+E03 <- mean(df[["benefits_week30"]][df[["educ_primaryorless"]]==1])
+E03
+E13 <- mean(df[["benefits_week30"]][df[["educ_prepvocational"]]==1])
+E13
+E23 <- mean(df[["benefits_week30"]][df[["educ_vocational"]]==1])
+E23
+E33 <- mean(df[["benefits_week30"]][df[["educ_bachelormaster"]]==1])
+E33
+unk3 <- mean(df[["benefits_week30"]][df[["educ_unknown"]]==1])
+unk3
+```
+Again we see that the applicants whose educational level is unkown stick out like a sore thumb, and so we remove those individuals from our sample:
+```{r}
+df <- df[df$educ_unknown != 1,]
+```
+What we then note, is that the difference between the outcomes for applicants in the categories "primaryorless", "prepvocational", and "vocational", is far smaller and less pronounced than the difference between the outcomes for those applications and those from "bachelormaster". Simple t-tests reveal that only "bachelormaster" is always significantly different from all other categories with regards to outcomes.
+```{r}
+# 10 weeks: prepvocational - vocational
+t.test(df[["benefits_week10"]][df[["educ_prepvocational"]]==1]-df[["benefits_week10"]][df[["educ_vocational"]]==1])
+
+# 30 weeks: primaryorless - prepvocational
+t.test(df[["benefits_week30"]][df[["educ_primaryorless"]]==1]-df[["benefits_week30"]][df[["educ_prepvocational"]]==1])
+```
+
+It thus seems logical to use the variable "educ_bachelormaster" as our monotone instrumental variable against all other forms of education. In this way, we also avoid splitting our fairly limited dataset of only 1614 observations into too many cells. So, we set $Z=1$ if "educ_bachelormaster"$=1$.
+
+The Monotone Instrumental Variable assumption we make is that $E[Y_d^*|Z=0]\geq E[Y_d^*|Z=1], \ \ \ d=0,1.$ Keep in mind that a lower value of $Y$ is preferred by the case worker.
+
+To calculate the bounds, we take the following as a starting point:
+$$E[Y^*_1] = Pr(Z=0)E[Y_1^*|Z=0] + Pr(Z=1)E[Y_1^*|Z=1]$$
+The probabilities are easily calculated:
+```{r}
+Pz1 <- sum(df[["educ_bachelormaster"]]==1)/nrow(df)
+Pz1
+Pz0 <- 1-Pz1
+Pz0
+```
+The best lower bound for $E[Y^*_1|Z=0]$ is the maximum value of the bounds
+$LB(d=1,Z=0)$ and $LB(d=1,Z=1)$. We calculate these lower bounds in the following way:
+$$
+E[Y^*_d|Z=0]\geq LB(d,Z=0)=E[Y_d|z=0]Pr(Z=0)+y_{min}Pr(Z=1), \ \ d\in {0,1}
+$$
+For $Z=0$, and:
+$$
+E[Y^*_d|Z=1]\geq LB(d,Z=1)=E[Y_d|Z=1]Pr(Z=1)+y_{min}Pr(Z=0), \ \ d\in {0,1}
+$$
+Since we have that $y_min=0$, the above equations simplify to just $E[Y^*_1|Z=i]=E[Y_1|z=i], \ \ i\in {1,2}$. We will call the better/higher lower bound $LB_{max}(1,z)$, and the worse lower bound $LB_{min}(1,z)$ for $z\in {0,1}$. Let us calculate those values:
+```{r}
+# 10 weeks
+LB10d1z0 <- mean(df[df$searchperiod == 1 & df$educ_bachelormaster == 0,]$benefits_week10)*Pz0
+LB10d1z1 <- mean(df[df$searchperiod == 1 & df$educ_bachelormaster == 1,]$benefits_week10)*Pz1
+
+LB10d0z0 <- mean(df[df$searchperiod == 0 & df$educ_bachelormaster == 0,]$benefits_week10)*Pz0
+LB10d0z1 <- mean(df[df$searchperiod == 0 & df$educ_bachelormaster == 1,]$benefits_week10)*Pz1
+
+# 30 weeks
+LB30d1z0 <- mean(df[df$searchperiod == 1 & df$educ_bachelormaster == 0,]$benefits_week30)*Pz0
+LB30d1z1 <- mean(df[df$searchperiod == 1 & df$educ_bachelormaster == 1,]$benefits_week30)*Pz1
+
+LB30d0z0 <- mean(df[df$searchperiod == 0 & df$educ_bachelormaster == 0,]$benefits_week30)*Pz0
+LB30d0z1 <- mean(df[df$searchperiod == 0 & df$educ_bachelormaster == 1,]$benefits_week30)*Pz1
+```
+
+In the same way we acquire the upper bounds for $E[Y^*_1|Z=0]$ is the minimum value of the bounds
+$UB(d=1,Z=0)$ and $UB(d=1,Z=1)$. Which we calculate in the following way:
+$$
+E[Y^*_1|Z=0]\leq UB(d=1,Z=0)=E[Y_1|z=0]Pr(Z=0)+y_{max}Pr(Z=1)
+$$
+For $Z=0$, and:
+$$
+E[Y^*_1|Z=1]\leq UB(d=1,Z=1)=E[Y_1|Z=1]Pr(Z=1)+y_{max}Pr(Z=0).
+$$
+
+We can calculate the upper bounds:
+```{r}
+# 10 weeks
+UB10d1z0 <- (LB10d1z0+Pz1)
+UB10d1z1 <- (LB10d1z1+Pz0)
+
+UB10d0z0 <- (LB10d0z0+Pz1)
+UB10d0z1 <- (LB10d0z1+Pz0)
+
+# 30 weeks
+UB30d1z0 <- (LB30d1z0+Pz1)
+UB30d1z1 <- (LB30d1z1+Pz0)
+
+UB30d0z0 <- (LB30d0z0+Pz1)
+UB30d0z1 <- (LB30d0z1+Pz0)
+```
+
+Using this to make some substitutions, we get:
+$$
+    E[Y^*_1] \geq Pr(Z=0)LB_{max}(1,0) + Pr(Z=1)LB_{min}(1,1)
+$$
+Which gives us the complete lower bound:
+```{r}
+# 10 weeks
+LB10_d1 <- Pz0*max(LB10d1z1, LB10d1z0)+Pz1*min(LB10d1z1, LB10d1z0)
+LB10_d0 <- Pz0*max(LB10d0z1, LB10d0z0)+Pz1*min(LB10d0z1, LB10d0z0)
+
+# 30 weeks
+LB30_d1 <- Pz0*max(LB30d1z1, LB30d1z0)+Pz1*min(LB30d1z1, LB30d1z0)
+LB30_d0 <- Pz0*max(LB30d0z1, LB30d0z0)+Pz1*min(LB30d0z1, LB30d0z0)
+```
+
+Similarly for the upper bound we get:
+$$
+    E[Y^*_1] \leq Pr(Z=0)UB_{max}(1,0) + Pr(Z=1)UB_{min}(1,1)
+$$
+Which gives us the complete upper bound:
+```{r}
+# 10 weeks
+UB10_d1 <- Pz0*max(UB10d1z1, UB10d1z0)+Pz1*min(UB10d1z1, UB10d1z0)
+UB10_d0 <- Pz0*max(UB10d0z1, UB10d0z0)+Pz1*min(UB10d0z1, UB10d0z0)
+
+# 30 weeks
+UB30_d1 <- Pz0*max(UB30d1z1, UB30d1z0)+Pz1*min(UB30d1z1, UB30d1z0)
+UB30_d0 <- Pz0*max(UB30d0z1, UB30d0z0)+Pz1*min(UB30d0z1, UB30d0z0)
+```
+
+Putting it all together, we see that the bounds for $E[Y_0^*]$ are:
+$$
+    E[Y^*_d] \geq Pr(Z=0)LB_{max}(0,0) + Pr(Z=1)LB_{min}(0,1) \\
+    E[Y^*_d] \leq Pr(Z=0)UB_{max}(0,0) + Pr(Z=1)UB_{min}(0,1)
+$$
+
+This gives us the final, complete MIV bounds as:
+```{r}
+LB10_MIV <- LB10_d1 - UB10_d0
+LB10_MIV
+UB10_MIV <- UB10_d1 - LB10_d0
+UB10_MIV
+```
+
+```{r}
+LB30_MIV <- LB30_d1 - UB30_d0
+LB30_MIV
+UB30_MIV <- UB30_d1 - LB30_d0
+UB30_MIV
+```

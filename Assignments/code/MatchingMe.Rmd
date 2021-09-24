@@ -1,0 +1,196 @@
+---
+title: "Assignment 3 - Weighting and Matching"
+author: "S. Engilbertsson and I.v.d. Voort"
+date: "19/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Code to load dataset and compute regressions
+Commenting style follows http://adv-r.had.co.nz/Style.html`
+
+```{r, message=FALSE, warning=FALSE}
+rm(list = ls())
+
+library(haven)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(xtable)
+library(stargazer)
+library(modelsummary)
+library(dplyr)
+```
+
+### List of working directories
+Default working directory
+```{r}
+cd <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/code'
+```
+
+Folder containing data and folder for outputs
+```{r}
+dt <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/data'
+tb <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/Final'
+```
+
+### Reading in data
+```{r}
+setwd(dt)
+df <- read_dta("C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied-Microeconometrics/Assignments/data/cardkrueger.dta")
+setwd(tb)
+```
+
+# Problem: Minimum wages in the US (Card & Krueger)
+In their famous study Card and Krueger (AER, 1994) investigated the effects of increasing the minimum wage on employment. Therefore, they used data from fast-food restaurants in New Jersey and Pennsylvania. The data consist of two waves of a survey, of which one was conducted prior to a minimum wage increase in New Jersey and the other afterwards. This paper has been one of the first in which a difference-in-difference model has been used to estimate a policy parameters (the effect of a minimum wage increase).
+
+The first columns of the data describe the variables collected in the first wave of the survey, while the later columns describe the second survey (see also the file containing the description of the data). Each survey containing the number of full-time employees and the number of part-time employees. Construct a variable full-time equivalent for both waves, which is the number of full-time employees plus the number of part-time employees divided by two and also add the number of managers. I will simply refer to employees for this outcome variable. In this exercise we investigate the robustness of the results reported by Card and Krueger (1994).
+```{r}
+# Construct the employee variable
+df$emp_before <- df$EMPFT+(df$EMPPT)/2+df$NMGRS
+df$emp_after <- df$EMPFT2+(df$EMPPT2)/2+df$NMGRS2
+df$emp_diff <- df$emp_after-df$emp_before
+```
+
+### *(i)* Compute separately for New Jersey and Pennsylvania the average number of employees in both waves, and compute the difference-in-difference estimate.
+
+### *Solution*
+We start by calculating the averages and setting up a table:
+```{r, message=FALSE, warning=FALSE}
+df_state <- group_by(df, STATE)
+df_state <- mutate(df_state,STATE = if_else(
+  STATE == 1,
+  "NJ",
+  "PA"))
+mean_emp <- summarise(df_state, across(c("emp_before","emp_after"), mean, na.rm=T))
+mean_tbl <- xtable(mean_emp)
+mean_tbl
+```
+
+Now we calculate the diff-in-diff estimator:
+```{r}
+did <- mean_emp$emp_after[1] - mean_emp$emp_after[2] - (mean_emp$emp_before[1] - mean_emp$emp_before[2])
+
+did
+```
+
+### Next repeat this, but only considering the restaurants that responded in both waves of the survey
+We start by calculating the averages and setting up a table:
+```{r}
+df_state2 <- filter(df_state, STATUS2==1)
+mean_emp2 <- summarise(df_state2, across(c("emp_before","emp_after"), mean, na.rm=T))
+mean_tbl2 <- xtable(mean_emp2)
+mean_tbl2
+```
+
+Now we calculate the diff-in-diff estimator only for restaurants who replied both times:
+```{r}
+did2 <- mean_emp2$emp_after[1] - mean_emp2$emp_after[2] - (mean_emp2$emp_before[1] - mean_emp2$emp_before[2])
+
+did2
+```
+
+#### Next we focus on the regression model:
+$$
+E_{1i}-E_{0i}=\alpha+\delta NJ_i+U_i
+$$
+
+#### where $E_{1i}-E_{0i}$ is the change in employment in restaurant $i$ between the two waves, and $NJ_i$ is a dummy variable indicating whether restaurant $i$ is located in New Jersey.
+
+### *(ii)* Estimate this model and next subsequently add characteristics of the restaurants observed in the first wave. But think carefully which characteristics can be included. How does the latter affect the estimate for the coefficient $\delta$?
+
+### *Solution*
+The base regression:
+```{r}
+df2 <- filter(df, STATUS2==1)
+df2$emp_diff <- df2$emp_after-df2$emp_before
+reg1 <- lm(emp_diff ~ STATE, data = df2)
+cov1 <- vcovHC(reg1, type = "HC1")
+rob1 <- sqrt(diag(cov1))
+coeftest(reg1, vcov = sandwich)
+```
+
+Now we add some characteristics which might play a part in explaining the change in employment and would thus lead to an omitted variable bias in our base regression. We do not include the variable "PCTAFF", as it is determined by the level of the minimum wage increase, and is thus an intermediate variable and a bad control.
+
+We first include all variables:
+```{r}
+reg2 <- lm(emp_diff ~ STATE + CENTRALJ + NORTHJ + SHORE + PA1 + CHAIN + CO_OWNED + NCALLS + WAGE_ST + INCTIME + FIRSTINC + BONUS + MEALS + OPEN + HRSOPEN +  PSODA + PFRY + PENTREE + NREGS + NREGS11, data = df2)
+cov2 <- vcovHC(reg2, type = "HC1")
+rob2    <- sqrt(diag(cov2))
+coeftest(reg2, vcov = sandwich)
+```
+
+We wish to include variables which are relevant to assignment, but are not intermediate variables that affect outcome through their correlation with receiving treatment. We thus run the following regression using robust standard errors:
+```{r}
+regX <- lm(STATE ~  CHAIN + CO_OWNED + NCALLS + WAGE_ST + INCTIME + FIRSTINC + BONUS + MEALS + OPEN + HRSOPEN + PSODA + PFRY + PENTREE + NREGS + NREGS11, data = df2)
+covX <- vcovHC(regX, type = "HC1")
+robX    <- sqrt(diag(covX))
+coeftest(regX, vcov = sandwich)
+```
+
+Next, we run sparser regressions:
+```{r}
+reg3 <- lm(emp_diff ~ STATE + CENTRALJ + NORTHJ + SHORE + PA1 + CHAIN + WAGE_ST + HRSOPEN + MEALS + OPEN + PSODA + PFRY + NREGS, data = df2)
+cov3 <- vcovHC(reg3, type = "HC1")
+rob3 <- sqrt(diag(cov3))
+coeftest(reg3, vcov = sandwich)
+```
+
+```{r}
+models <- list(reg1, reg2, reg3)
+stargazer(models,
+          se = list(rob1, rob2, rob3), header = FALSE,
+          type = "latex", out = './Q2tbl.tex', omit.stat = c("adj.rsq", "ser", "f"), title = "Three OLS regressions with robust standard errors.",  
+          table.placement = "H", no.space = TRUE)
+```
+
+####  The validity of difference-in-difference estimation hinges on a common trend between the treatment and control group. Sometimes trends before the intervention can be used to justify this common trend assumption. This is not possible in this setting since the data only contain information on one time period before the intervention. Therefore, we consider a different approach. From now only we only focus on those restaurants which have responded in both waves.
+```{r}
+df3 <- filter(df2, is.na(emp_diff) == F)
+```
+
+
+### *(iii)* Provide a balancing table, i.e. show the sample mean of characteristics observed in the first survey separately for the restaurants in New Jersey and Pennsylvania. What is your opinion about the balancing table?
+
+### *Solution*
+Do this in Stata.
+
+### *(iv)*  Check for the different characteristics if there is a common support for restaurants in New Jersey and Pennsylvania. And estimate a propensity score for being a restaurant in New Jersey.
+
+### *Solution*
+Only common support for 
+
+### *(v)* Use propensity score matching to estimate the average treatment effect on the treated for the employment before and after the minimum wage increase in New Jersey, so on $E_{0i}$ and $E_{1i}$ separately.
+
+### *Solution*
+
+
+### *(vi)* Now use propensity score matching to estimate the average treatment effect on the treated on the change in employment in the restaurants, so $E_{1i}-E_{0i}$.
+
+### *Solution*
+
+
+### *(vii)* Now check the sensitivity of the propensity score matching estimate by also computing the weighting estimators for the average treatment effect on the treated.
+
+### *Solution*
+```{r}
+df4$STATE <-  as.numeric(as.character(df4$STATE))
+df4$prs2 <- as.numeric(as.character(df4$prs2))
+df4$emp_before <-  as.numeric(as.character(df4$emp_before))
+df4$emp_after <-  as.numeric(as.character(df4$emp_after))
+df4$emp_after <-  as.numeric(as.character(df4$emp_after))
+df4$emp_diff <-  as.numeric(as.character(df4$emp_diff))
+df4$prs2_weights <- (1 / df4$prs2 * df4$STATE + 1 / (1 - df4$prs2) * (1 - df4$STATE))
+
+prs2_wght_w0 <- lm(emp_before ~ STATE, df4, weights = prs2_weights)
+prs2_wght_w1 <- lm(emp_after ~ STATE, df4, weights = prs2_weights)
+prs2_wght_diff <- lm(emp_diff ~ STATE, df4, weights = prs2_weights)
+stargazer(prs2_wght_w0, prs2_wght_w1, prs2_wght_diff,
+          se = list(robust(prs2_wght_w0), robust(prs2_wght_w1), robust(prs2_wght_diff)),
+          type = "latex", out = './q7.tex', omit.stat = c("adj.rsq", "ser", "f"), title = "The regressiion results with weightning estimator",  
+          table.placement = "H", no.space = TRUE, column.sep.width = "-5pt")
+
+```

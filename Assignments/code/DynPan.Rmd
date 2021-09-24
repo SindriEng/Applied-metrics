@@ -1,0 +1,106 @@
+---
+title: "Assignment 1 - Dynamic Panel Data Models"
+author: "S. Engilbertsson and I.v.d. Voort"
+date: "3/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Code to load dataset and compute regressions
+Commenting style follows http://adv-r.had.co.nz/Style.html`
+
+```{r, message=FALSE, warning=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(dynlm)
+library(stargazer)
+library(plm)
+library(dplyr)
+library(Hmisc)
+library(ivreg)
+```
+
+### List of working directories
+Default working directory
+```{r}
+cd <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied Microeconometrics/Assignments/code'
+```
+
+Folder containing data
+```{r}
+dt <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied Microeconometrics/Assignments/data'
+```
+
+Folder for outputs
+```{r}
+tb <- 'C:/Users/sindr/Desktop/Tinbergen/2nd-year/Block 1/Applied Microeconometrics/Assignments/Final'
+```
+
+### Reading in data
+```{r}
+setwd(dt)
+df <- as.data.frame(fread('datadynpan2021.csv'))
+setwd(tb)
+```
+
+## Assignment
+On Canvas you find the data sets datadynpan2021.dta (Stata version) and datadynpan2021.csv (same, but comma-separated format), which was used by Jan van Ours. 
+
+Except for the price, we allow the demand to depend on income, the amount of illegal opium intercepted by the authorities, and a time trend. Furthermore, we allow for structural differences between districts. Consider the model specification (referring to district $i$ in year $t$)
+
+$$\log(\text{consumption}_{i,t})=\beta_0+\beta_1 \log(\text{prices}_{i,t})+\beta_2 \log(\text{income}_{i,t}) +\beta_3 \log(\text{illegal opium}_{i,t})+\beta_4t+\beta_5 \log(\text{consumption}_{i,t-1})+\eta_i+U_{i,t}$$
+
+```{r}
+dt <- data.table(df)
+dt[, dlqt := c(NA, diff(logquantity)), by = region]
+dt[, dlpr := c(NA, diff(logprice)), by = region]
+dt[, dlinc := c(NA, diff(logincome)), by = region]
+dt[, dlill := c(NA, diff(logillegal)), by = region]
+dt[, d2lqt := c(NA, diff(dlqt)), by = region]
+
+dt <- dt %>%
+  group_by(region) %>%
+  mutate(l2qt = lag(logquantity, 2)) %>%
+  ungroup
+
+pdf <- pdata.frame(dt, index=c("region", "year"))
+```
+
+### **Question 5**
+*Estimate the model parameters using the Arellano & Bond estimator, tabulate the results and discuss the parameter estimates.*
+
+### Solution
+For this question we use the plm-package function pgmm, described here <https://rdrr.io/rforge/plm/man/pgmm.html>:
+```{r, warning=FALSE}
+abond_estimator <- pgmm(logquantity ~ logprice + logincome + logillegal + as.numeric(year) +
+                     lag(logquantity) | lag(logquantity, 2:99), 
+                     data = pdf, effect = "individual", model = "twosteps", 
+                     transformation = "d")
+summary(abond_estimator)
+```
+This estimator is displayed in table 1, along with the Blundell & Bond estimator from question 7.
+
+### **Question 7**
+*Now estimate the model parameters using the system estimator (Blundell & Bond). Tabulate results, compute the elasticities (as in 6.)*
+
+### Solution
+Again we turn to the pgmm function:
+```{r, warning = FALSE}
+bbond_estimator <- pgmm(logquantity ~ logprice + logincome + logillegal + as.numeric(year) + 
+                     lag(logquantity) | lag(logquantity, 2:99), 
+                     data = pdf, effect = "individual", model = "twosteps", 
+                     transformation = "ld")
+summary(bbond_estimator)
+```
+The results are in the following table:
+```{r echo=FALSE, results='asis'}
+stargazer(abond_estimator, bbond_estimator,
+          type = "latex", header = F, model.names = FALSE,
+          dep.var.labels="$log(C_{it})",
+          column.labels = c("Arellano-Bond", "Blundell-Bond"))
+```
+Finally, the elasticities equal -0.5513 in the short-run, statistically significant, and -4.747 in the long-run.
