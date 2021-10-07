@@ -52,6 +52,9 @@ replace season = 1 if stmonth == 12 | stmonth <= 2
 replace season = 2 if stmonth == 3 | stmonth ==4 | stmonth == 5
 replace season = 3 if stmonth == 6 | stmonth == 7 | stmonth == 8
 sts test season
+g flu = 0
+replace flu = 1 if stmonth == 12 | stmonth <= 3
+sts test flu
 
 * Significant differences for gender, urban, protest and year
 
