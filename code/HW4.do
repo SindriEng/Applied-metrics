@@ -210,19 +210,8 @@ replace step17 = 1 if Manystep==200
 
 streg agec agec2 genderc femage protest lowgroup urban hours marstat step0 step1 step2 step3 step4 step5 step6 step7 step8 step9 step10 step11 step12 step13 step14 step15 step16 step17, distribution(exponential) cl(schoolid) nohr noconstant
 
-g bhaz = 0
-replace bhaz = exp(-.7057141) if dur0==1
-replace bhaz = exp(-.9758476) if dur1==1
-replace bhaz = exp(-2.414727) if dur2==1
-replace bhaz = exp(-3.953066) if dur3==1
-replace bhaz = exp(-4.619006) if dur4==1
-replace bhaz = exp(-4.870597) if dur5==1
-br
-graph, bhz tmax(100)
-scatter bhaz splength
-
 *Q4:
-
+Change back from using id before using Cox.
 
 *Q5:
 
