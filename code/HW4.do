@@ -1,13 +1,12 @@
 *Questions: failure variable, adding id - difference no of subjects/records, psick==9999
 
 use "C:\Users\sindr\Desktop\Tinbergen\2nd-year\Block 1\Applied-Microeconometrics\Applied-metrics\data\FlowSpells.dta", clear
+drop if sptype==1
+drop psick
 egen id=group(schoolid teachid)
 order schoolid teachid id sptype dest rcensor
 
 * Q1: Sickness absence at the individual level: Descriptives
-drop if sptype==1
-drop psick
-
 * Tell Stata that we have duration data
 stset splength, failure(dest==1)
 stdes
@@ -41,48 +40,44 @@ sts graph, hazard tmax(365) width(3 3 3 3) by(marstat)
 
 * We test for significant differences in the hazard rates for those subgroups:
 sts test gender
-* Men seem to be sick for longer than women.
+* Men seem to be sick more often than women.
 sts test protest
-* Protestant schools have teachers that are sick for longer.
+* Protestant school teachers are more often sick.
 sts test catholic
-* Teachers at catholic schools are sick for shorter periods.
+* Teachers at catholic schools are less often sick.
 sts test public
 sts test year
-* 1989 had longer sickspells than expected.
+* 1989 and 1990 had unusally high number of sickspells than expected.
 sts test marstat
-*sts test contract
 sts test hours
-* Full time workers are sick for longer
+* Full time workers are sick more often.
 sts test merged
 sts test urban
-* Rural teachers are sick for shorter periods.
+* Rural teachers are sick less often.
 sts test lowgroup
-* Teachers for higher classes are sick for longer.
+* Teachers for higher classes are sick more often.
 
 g season = 0
-replace season = 1 if stmonth == 12 | stmonth <= 2
-replace season = 2 if stmonth == 3 | stmonth ==4 | stmonth == 5
-replace season = 3 if stmonth == 6 | stmonth == 7 | stmonth == 8
+replace season = 1 if stmonth == 9 | stmonth == 10 | stmonth == 11
+replace season = 2 if stmonth == 12 | stmonth <= 2
+replace season = 3 if stmonth == 3 | stmonth ==4 | stmonth == 5
 sts test season
 
 g flu = 0
 replace flu = 1 if stmonth == 12 | stmonth <= 3
 sts test flu
-
 * Significant differences for gender, protest, catholic, year and urban.
 
 * Q2: Parametric models - Exponential and Weibull 
 g age = styr - birthyr
 g age2 = age^2
 
-tab age
 sts test age
-* Interesting, younger teachers have more sick days than expected, while older teachers have fewer.
+* Interesting, younger teachers are more often more sick than older teachers.
 
 streg age,  distribution(weibull) cl(schoolid) nohr
 
 streg age age2, distribution(weibull) cl(schoolid) nohr
-stcurve, hazard
 * Why does including age2 kill the effect? there is going to be collinearity between the two unless we center.
 * Let's try to first center "age" (make mean=0) before squaring it.
 summarize age, meanonly
@@ -100,67 +95,61 @@ g femage = genderc*agec
 * The two Weibull regressions:
 streg agec,  distribution(weibull) cl(schoolid) nohr
 
-streg agec agec2 genderc femage protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+
+streg agec agec2 genderc femage, distribution(weibull) cl(schoolid) nohr
 
 * Two exponential regression:
 streg agec,  distribution(exponential) cl(schoolid) nohr
 
-streg agec agec2 genderc femage protest lowgroup classize urban hours avgten marstat, distribution(exponential) cl(schoolid) nohr
+streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(exponential) cl(schoolid) nohr
 
 * Separate Weibull for males and females:
 frame put if gender == 1, into(males)
 frame males: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame males: streg agec agec2 protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame males: streg agec agec2 protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if gender == 2, into(females)
 frame females: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame females: streg agec agec2 protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame females: streg agec agec2 protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 * Do the same for other subgroups, base it on the sts tests above?
 * Age:
 frame put if agec >= 0, into(older)
 frame older: streg genderc,  distribution(weibull) cl(schoolid) nohr
 
-frame older: streg genderc femage protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame older: streg genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if agec < 0, into(younger)
 frame younger: streg genderc,  distribution(weibull) cl(schoolid) nohr
 
-frame younger: streg genderc femage protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame younger: streg genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 * Flu:
 frame put if flu == 1, into(Flu)
-frame Flu: streg agec,  distribution(weibull) cl(schoolid) nohr
-
-frame Flu: streg agec agec2 genderc femage protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame Flu: streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if flu == 0, into(NoFlu)
-frame NoFlu: streg agec,  distribution(weibull) cl(schoolid) nohr
-
-frame NoFlu: streg agec agec2 genderc femage protest lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame NoFlu: streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 * Protestant:
 frame put if protest == 1, into(Protestant)
-frame Protestant: streg agec,  distribution(weibull) cl(schoolid) nohr
-
-frame Protestant: streg agec agec2 genderc femage lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame Protestant: streg agec agec2 genderc femage lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if protest == 0, into(NotProtestant)
-frame NotProtestant: streg agec,  distribution(weibull) cl(schoolid) nohr
-
-frame NotProtestant: streg agec agec2 genderc femage lowgroup classize urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame NotProtestant: streg agec agec2 genderc femage lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 * Urban:
 frame put if urban <= 2, into(Rural)
 frame Rural: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame Rural: streg agec agec2 genderc femage lowgroup classize protest hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame Rural: streg agec agec2 genderc femage lowgroup protest hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if urban > 2, into(City)
 frame City: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame City: streg agec agec2 genderc femage lowgroup classize protest hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame City: streg agec agec2 genderc femage lowgroup protest hours avgten marstat, distribution(weibull) cl(schoolid) nohr
 
 *Q3: Parametric models – Piece Wise constant
 * Few steps
@@ -178,12 +167,11 @@ replace dur3 = 1 if sickdur==7
 gen dur4=0
 replace dur4 = 1 if sickdur==8
 
-streg agec agec2 genderc femage protest lowgroup classize urban hours avgten marstat dur0 dur1 dur2 dur3 dur4, distribution(exponential) cl(schoolid) nohr noconstant
+streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat dur0 dur1 dur2 dur3 dur4, distribution(exponential) cl(schoolid) nohr noconstant
 * Here, not only gender and age but also hours and urban significant
 * Many steps
 stset splength, failure(dest==1) id(id)
 stsplit Manystep, at(2 3 4 5 7 8 10 13 14 15 21 30 50 60 90 120 200)
-br
 gen step0=0
 replace step0 = 1 if Manystep==0
 gen step1=0
@@ -221,7 +209,7 @@ replace step16 = 1 if Manystep==120
 gen step17=0
 replace step17 = 1 if Manystep==200
 
-streg agec agec2 genderc femage protest lowgroup classize urban hours avgten marstat step0 step1 step2 step3 step4 step5 step6 step7 step8 step9 step10 step11 step12 step13 step14 step15 step16 step17, distribution(exponential) cl(schoolid) nohr noconstant
+streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat step0 step1 step2 step3 step4 step5 step6 step7 step8 step9 step10 step11 step12 step13 step14 step15 step16 step17, distribution(exponential) cl(schoolid) nohr noconstant
 
 g bhaz = 0
 replace bhaz = exp(-.7057141) if dur0==1
