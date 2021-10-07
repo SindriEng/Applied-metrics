@@ -1,5 +1,5 @@
 *Questions: failure variable, adding id - difference no of subjects/records, psick==9999
-
+clear
 use "C:\Users\sindr\Desktop\Tinbergen\2nd-year\Block 1\Applied-Microeconometrics\Applied-metrics\data\FlowSpells.dta", clear
 drop if sptype==1
 drop psick
@@ -15,8 +15,6 @@ stdes
 
 * Now we do a simple listing of the survivor function:
 sts list
-
-bbreak
 
 * This allows us to plot the survivor function for two weeks and the first year:
 sts graph, survival tmax(14)
@@ -95,61 +93,62 @@ g femage = genderc*agec
 * The two Weibull regressions:
 streg agec,  distribution(weibull) cl(schoolid) nohr
 
-streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+* [THIS IS OUR FINAL REGRESSION MODEL]
+streg agec agec2 genderc femage protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 streg agec agec2 genderc femage, distribution(weibull) cl(schoolid) nohr
 
 * Two exponential regression:
 streg agec,  distribution(exponential) cl(schoolid) nohr
 
-streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(exponential) cl(schoolid) nohr
+streg agec agec2 genderc femage protest lowgroup urban hours marstat, distribution(exponential) cl(schoolid) nohr
 
 * Separate Weibull for males and females:
 frame put if gender == 1, into(males)
 frame males: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame males: streg agec agec2 protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame males: streg agec agec2 protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if gender == 2, into(females)
 frame females: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame females: streg agec agec2 protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame females: streg agec agec2 protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 * Do the same for other subgroups, base it on the sts tests above?
 * Age:
 frame put if agec >= 0, into(older)
 frame older: streg genderc,  distribution(weibull) cl(schoolid) nohr
 
-frame older: streg genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame older: streg genderc femage protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if agec < 0, into(younger)
 frame younger: streg genderc,  distribution(weibull) cl(schoolid) nohr
 
-frame younger: streg genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame younger: streg genderc femage protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 * Flu:
 frame put if flu == 1, into(Flu)
-frame Flu: streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame Flu: streg agec agec2 genderc femage protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if flu == 0, into(NoFlu)
-frame NoFlu: streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame NoFlu: streg agec agec2 genderc femage protest lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 * Protestant:
 frame put if protest == 1, into(Protestant)
-frame Protestant: streg agec agec2 genderc femage lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame Protestant: streg agec agec2 genderc femage lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if protest == 0, into(NotProtestant)
-frame NotProtestant: streg agec agec2 genderc femage lowgroup urban hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame NotProtestant: streg agec agec2 genderc femage lowgroup urban hours marstat, distribution(weibull) cl(schoolid) nohr
 
 * Urban:
 frame put if urban <= 2, into(Rural)
 frame Rural: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame Rural: streg agec agec2 genderc femage lowgroup protest hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame Rural: streg agec agec2 genderc femage lowgroup protest hours marstat, distribution(weibull) cl(schoolid) nohr
 
 frame put if urban > 2, into(City)
 frame City: streg agec,  distribution(weibull) cl(schoolid) nohr
 
-frame City: streg agec agec2 genderc femage lowgroup protest hours avgten marstat, distribution(weibull) cl(schoolid) nohr
+frame City: streg agec agec2 genderc femage lowgroup protest hours marstat, distribution(weibull) cl(schoolid) nohr
 
 *Q3: Parametric models – Piece Wise constant
 * Few steps
@@ -167,7 +166,7 @@ replace dur3 = 1 if sickdur==7
 gen dur4=0
 replace dur4 = 1 if sickdur==8
 
-streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat dur0 dur1 dur2 dur3 dur4, distribution(exponential) cl(schoolid) nohr noconstant
+streg agec agec2 genderc femage protest lowgroup urban hours marstat dur0 dur1 dur2 dur3 dur4, distribution(exponential) cl(schoolid) nohr noconstant
 * Here, not only gender and age but also hours and urban significant
 * Many steps
 stset splength, failure(dest==1) id(id)
@@ -209,7 +208,7 @@ replace step16 = 1 if Manystep==120
 gen step17=0
 replace step17 = 1 if Manystep==200
 
-streg agec agec2 genderc femage protest lowgroup urban hours avgten marstat step0 step1 step2 step3 step4 step5 step6 step7 step8 step9 step10 step11 step12 step13 step14 step15 step16 step17, distribution(exponential) cl(schoolid) nohr noconstant
+streg agec agec2 genderc femage protest lowgroup urban hours marstat step0 step1 step2 step3 step4 step5 step6 step7 step8 step9 step10 step11 step12 step13 step14 step15 step16 step17, distribution(exponential) cl(schoolid) nohr noconstant
 
 g bhaz = 0
 replace bhaz = exp(-.7057141) if dur0==1
